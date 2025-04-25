@@ -1,0 +1,376 @@
+/*
+GUÍA DE INVESTIGACIÓN 4
+Investigación 4: Análisis de la ENAHO
+Asistente de Investigación: Benjamin Camizán Gs
+*/
+******************************************************************************
+*merge2: 
+´´ //Estas comillas son con para detener el do y no correr todo.
+
+******************************************************************************
+// Directorio
+cd "C:\Users\Benjamin\Downloads\Investigación 4 v01\2. Data\Data\Data-2022-2024"
+
+*==============================================================================
+*                                PASOS PREVIOS                                
+*==============================================================================
+/*------------------------------------------------------------------------------
+    ANÁLISIS INICIAL DE LA MUESTRA-DETECCIÓN DE DUPLICADOS
+------------------------------------------------------------------------------
+* PASO 1: ABRIR LA BASE DE DATOS
+* Asegúrate de cargar correctamente la base de datos antes de ejecutar estos comandos.
+* PASO 2: VERIFICAR CLAVES ÚNICAS
+* Revisar si las variables `conglome`, `vivienda` y `hogar` identifican de manera única cada observación.
+* Si el siguiente mensaje aparece en rojo, significa que las claves no son únicas:
+* "variables conglome and vivienda do not uniquely identify the observations"
+isid conglome vivienda hogar  
+
+* PASO 3: REPORTE DE DUPLICADOS 
+* Analizar la existencia de observaciones duplicadas en la base de datos.
+* Interpretación del resultado:
+*   - Si `surplus = 0`, NO hay duplicados en `conglome`, `vivienda` y `hogar`.  
+*   - Si `surplus > 0`, existen observaciones duplicadas en estas variables.  
+
+duplicates report conglome vivienda hogar  
+
+* PASO 4: IDENTIFICACIÓN Y ELIMINACIÓN DE DUPLICADOS  
+* Si hay duplicados, proceder con la siguiente metodología para revisarlos y eliminarlos.
+    * 4.1. LISTAR LOS DUPLICADOS  
+    duplicates list conglome vivienda hogar codperso  
+    * 4.2. GENERAR UNA VARIABLE PARA MARCAR LOS DUPLICADOS  
+    duplicates tag conglome vivienda hogar codperso, gen(tag)  
+    * Interpretación de `tag`:
+    *   - `tag == 0`: No es duplicado.  
+    *   - `tag > 0`: Indica cuántas veces se repite menos 1.  
+    * 4.3. FILTRAR SOLO LOS DUPLICADOS PARA REVISIÓN  
+    list conglome vivienda hogar codperso if tag > 0  
+    * 4.4. ELIMINAR LOS DUPLICADOS (MANTENIENDO SOLO UNA OCURRENCIA)  
+    duplicates drop conglome vivienda hogar codperso, force  
+    * 4.5. VERIFICAR QUE NO HAYA DUPLICADOS  
+    duplicates report conglome vivienda hogar codperso
+* PASO 5: ORDENAR VARIABLES Y OBSERVACIONES  
+* Para mantener una estructura organizada en la base de datos.
+    * 5.1. ORDENAR VARIABLES EN LA BASE DE DATOS  
+    order conglome vivienda hogar codperso  
+    * 5.2. ORDENAR OBSERVACIONES SEGÚN VARIABLES CLAVE  
+    sort conglome vivienda hogar codperso  
+
+    * RESUMEN:
+    duplicates list conglome vivienda hogar codperso  
+    duplicates tag conglome vivienda hogar codperso, gen(tag)  
+    list conglome vivienda hogar codperso if tag > 0  
+    duplicates drop conglome vivienda hogar codperso, force  
+    duplicates report conglome vivienda hogar codperso
+    sort conglome vivienda hogar codperso  
+* Fuente: https://www.youtube.com/watch?v=rI5dvuSJqOE             */
+
+*==============================================================================
+*===============ETIQUETADO DE BD
+*prep_    para las BD abiertas y configuradas. 
+*int      par las BD unidas o fusionadas. 
+* master_	Base maestra (la principal de trabajo)-Perú
+* master_	Base maestra (la principal de trabajo)-Piura
+/* ============= SEGUIMIENTO DE BD
+enaho01-2022-100.dta      obs: 44,122 | var: 324
+enaho01-2022-200.dta     obs: 121,253 | var: 40
+*/
+*==============================================================================
+*--------Modulo 100-(Hogar)
+*==============================================================================
+use enaho01-2022-100.dta, replace //abriendo BD
+isid conglome vivienda hogar // Es una clave única
+duplicates report conglome vivienda hogar // No reportar duplicados
+sort conglome vivienda hogar //Ordenando valores de menor a mayor
+
+* Cambiando idioma
+clear all
+unicode analyze "enaho01-2022-100.dta" //Analizando los tipos de código de la base
+unicode encoding set "latin1" //Cambio de idioma a latino(código)
+unicode translate "enaho01-2022-100.dta" //Traducción del nombre de variables y datos
+
+use enaho01-2022-100.dta, replace //abriendo BD
+
+/*---- var: result: Análisis de resultado final de la encuesta. 
+ 1.Completa
+ 2.Incompleta
+ 3.Rechazo
+ 4.Ausente
+ 5.Vivienda Desocupada
+ 6.No se Inició la Entrevista
+ 7.Otro   
+ *Se trabaja solo con las encuestas completas e incompletas */
+ 
+tabulate result //Analizando encuestas
+drop if result>=3  //Eliminando 
+
+
+
+
+ /*    resultado final de la |
+                  encuesta |      Freq.     Percent        Cum.
+---------------------------+-----------------------------------
+                  completa |     29,212       66.21       66.21
+                incompleta |      5,001       11.33       77.54
+                   rechazo |      1,353        3.07       80.61
+                   ausente |        353        0.80       81.41
+       vivienda desocupada |      2,832        6.42       87.83
+                      otro |      5,371       12.17      100.00
+---------------------------+-----------------------------------
+                     Total |     44,122      100.00   
+*/
+
+save prep-enaho01-2022-100.dta, replace  // var: 324 | obs. 34,213
+*==============================================================================
+*--------Modulo 200 
+*==============================================================================
+use enaho01-2022-200.dta, clear //abriendo BD  var: 40 | obs. 121,253
+isid conglome vivienda hogar codperso // Es una clave única
+duplicates report conglome vivienda hogar codperso // No reportar duplicados
+sort conglome vivienda hogar codperso //Ordenando valores de menor a mayor
+
+*---- merge
+/*Comentario: sujeto: HOGARES --> Llaves: conglome vivienda hogar 
+Como la BD200 tiene más observaciones y está a nivel persona entonces se trabajará m:1
+*/
+use enaho01-2022-200.dta, clear
+
+merge m:1 conglome vivienda hogar using prep-enaho01-2022-100.dta, gen()  keep(3)
+drop _merge        // Matched 121,253  (_merge==3)
+
+save "int-enaho01-2022-1-2", replace
+isid conglome vivienda hogar codperso // Es una clave única
+duplicates report conglome vivienda hogar codperso // No reportar duplicados
+sort conglome vivienda hogar codperso //Ordenando valores de menor a mayor
+
+save "int-enaho01-2022-1-2", replace // var. 354 |obs. 121,253
+*===============================================================================
+*-------- OTROS MÓDULOS: MODULO 612
+*===============================================================================
+use enaho01-2022-612, clear  // var 24 | obs 957,964
+isid conglome vivienda hogar // No Es una clave única
+duplicates report conglome vivienda hogar // Presenta duplicados
+sort conglome vivienda hogar //Ordenando valores de menor a mayor
+
+/*
+/*Reporte de duplicados. /SE COMPROBÓ QUE ELIMINAR ANTES DE UNIR NO ES RECOMENDABLE
+--------------------------------------
+   Copies | Observations       Surplus
+----------+---------------------------
+       28 |       957964        923751
+--------------------------------------
+*/
+
+* ELIMINACIÓN DE DUPLICADOS. 
+    duplicates list conglome vivienda hogar  
+    duplicates tag conglome vivienda hogar, gen(tag)  
+    list conglome vivienda hogar  if tag > 0  
+    duplicates drop conglome vivienda hogar, force   //(923,751 observations deleted)
+    duplicates report conglome vivienda hogar 
+    sort conglome vivienda hogar  
+/*--------------------------------------
+   Copies | Observations       Surplus
+----------+---------------------------
+        1 |        34213             0
+-------------------------------------- */
+save prep-enaho01-2022-612, replace  //var. 25 | obs. 34,213
+
+*---- merge m:1
+use int-enaho01-2022-1-2-3-4-5, clear
+
+merge m:m conglome vivienda hogar using prep-enaho01-2022-612, gen()  keep(3)
+drop _merge //Matched  87,661  (_merge==3)
+
+isid conglome vivienda hogar codperso // No Es una clave única
+duplicates report conglome vivienda hogar codperso // Presenta duplicados
+sort conglome vivienda hogar //Ordenando valores de menor a mayor
+
+save "int-enaho01-2022-1-2-3-4-5-6", replace // var. 3,243 |obs. 87,661
+*/
+
+*---- merge m:m
+use int-enaho01-2022-1-2, clear 
+
+merge m:m conglome vivienda hogar using enaho01-2022-612, gen()  keep(3)
+drop _merge //Matched   957,964  (_merge==3)
+
+isid conglome vivienda hogar codperso // No Es una clave única
+duplicates report conglome vivienda hogar codperso // Presenta duplicados
+sort conglome vivienda hogar codperso //Ordenando valores de menor a mayor
+
+/*REPORTE DUPLICADOS: ser paciente demora en cargar aprox 10min
+--------------------------------------
+   Copies | Observations       Surplus
+----------+---------------------------
+        1 |        87040             0
+        8 |            8             7
+        9 |            9             8
+       12 |           12            11
+       13 |           26            24
+       14 |           56            52
+       15 |          150           140
+       16 |          224           210
+       17 |          731           688
+       18 |         1098          1037
+       19 |         2698          2556
+       20 |         6020          5719
+       21 |        12159         11580
+       22 |        23452         22386
+       23 |        51451         49214
+       24 |       110760        106145
+       25 |       179000        171840
+       26 |       178828        171950
+       27 |       175554        169052
+       28 |       128688        124092
+--------------------------------------
+*/
+
+* ELIMINACIÓN DE DUPLICADOS. 
+*    duplicates list conglome vivienda hogar  
+    duplicates tag conglome vivienda hogar codperso , gen(tag)  
+*    list conglome vivienda hogar  if tag > 0  
+    duplicates drop conglome vivienda hogar codperso, force   //(836,711 observations deleted)
+    duplicates report conglome vivienda hogar codperso //No presenta duplicados
+    sort conglome vivienda hogar  
+/*--------------------------------------
+   Copies | Observations       Surplus
+----------+---------------------------
+        1 |       121253             0
+--------------------------------------
+*/
+save "int-enaho01-2022-1-2-6", replace // var. 367 |obs. 121,253
+
+*==============================================================================
+*--------Modulo 300 
+*==============================================================================
+use enaho01a-2022-300, clear  // var. 519 | obs. 110,257
+isid conglome vivienda hogar codperso // Es una clave única
+duplicates report conglome vivienda hogar codperso // No reportar duplicados
+sort conglome vivienda hogar codperso  //Ordenando valores de menor a mayor
+
+*---- merge
+merge 1:1 conglome vivienda hogar codperso using int-enaho01-2022-1-2-6, gen()  keep(3)
+drop _merge //Matched  110,257  (_merge==3)
+
+save "int-enaho01-2022-1-2-6-3", replace
+isid conglome vivienda hogar codperso // Es una clave única
+duplicates report conglome vivienda hogar codperso // No reportar duplicados
+sort conglome vivienda hogar codperso //Ordenando valores de menor a mayor
+
+save "int-enaho01-2022-1-2-6-3", replace // var. 859 |obs. 110,257
+*==============================================================================
+*--------Modulo 400
+*==============================================================================
+use enaho01a-2022-400, clear  // var. 519 | obs. 110,257
+isid conglome vivienda hogar codperso // Es una clave única
+duplicates report conglome vivienda hogar codperso // No reportar duplicados
+sort conglome vivienda hogar codperso  //Ordenando valores de menor a mayor
+
+*---- merge
+merge 1:1 conglome vivienda hogar codperso using int-enaho01-2022-1-2-6-3, gen() keep(3)
+drop _merge //Matched 110,257  (_merge==3)
+
+save "int-enaho01-2022-1-2-6-3-4", replace
+isid conglome vivienda hogar codperso // Es una clave única
+duplicates report conglome vivienda hogar codperso // No reportar duplicados
+sort conglome vivienda hogar codperso //Ordenando valores de menor a mayor
+
+save "int-enaho01-2022-1-2-6-3-4", replace // var. 1,812 |obs. 110,257
+*==============================================================================
+*--------Modulo 500
+*==============================================================================
+use enaho01a-2022-500, clear  // var. 1,445 | obs. 87,661
+isid conglome vivienda hogar codperso // Es una clave única
+duplicates report conglome vivienda hogar codperso // No reportar duplicados
+sort conglome vivienda hogar codperso  //Ordenando valores de menor a mayor
+
+*---- merge
+use int-enaho01-2022-1-2-6-3-4, clear
+merge m:1 conglome vivienda hogar codperso using enaho01a-2022-500, gen() keep(3)
+drop _merge //Matched 87,661  (_merge==3)
+
+save "int-enaho01-2022-1-2-6-3-4-5", replace
+isid conglome vivienda hogar codperso // Es una clave única
+duplicates report conglome vivienda hogar codperso // No reportar duplicados
+sort conglome vivienda hogar codperso //Ordenando valores de menor a mayor
+
+save "int-enaho01-2022-1-2-6-3-4-5", replace // var. 3,222 |obs. 87,661
+*==============================================================================
+*==============================================================================
+*-------- MODULO SUMARIA
+*===============================================================================
+/*
+CONSTRUCCION DEL GASTO E INGRESO REAL NUEVA METODOLOGIA
+BD: Sumaria 	
+Fuente:  01.ConstrVarGastoIngreso2011-2022.do	| se puede encontrar en una carpeta comprimida "ConstVarGasto-Metodologia actualizada" en el modulo 34 (Modulo de Sumaria) 
+* CMD: TIA4-BO-Piura-sumaria-real-v01  //Este es el dofile que se trabajó
+SE CORRERÁ EL CÓDIGO CON SU DOFILE EN SUMARIA Y SE RENOMBRARÁ COMO: 
+pro-use sumaria-2022, clear
+*/	
+
+*---- verificando la dada
+use pro-sumaria-2022, clear  // var. 296 | obs. 34,213
+isid conglome vivienda hogar // Es una clave única
+duplicates report conglome vivienda hogar // No reportar duplicados
+sort conglome vivienda hogar //Ordenando valores de menor a mayor
+
+*---- merge m:1
+use int-enaho01-2022-1-2-6-3-4-5, clear
+
+merge m:1 conglome vivienda hogar using pro-sumaria-2022, gen()  keep(3)
+drop _merge   //Matched  87,661  (_merge==3)
+
+isid conglome vivienda hogar codperso // Es una clave única
+duplicates report conglome vivienda hogar codperso //No Presenta duplicados
+sort conglome vivienda hogar //Ordenando valores de menor a mayor
+
+save "int-enaho01-2022-1-2-6-3-4-5-sum", replace // var. 3,520 |obs. 87,661
+*==============================================================================
+*-------- Modulo: enaho01b-2022-2 (Modulo de Percepcíon)
+*==============================================================================
+/*Módulo de Percepción del Hogar Con los ingresos de su hogar
+*/
+
+*---- verificando la dada
+use enaho01b-2022-2, clear  // var. 97 | obs. 34,213
+isid conglome vivienda hogar // Es una clave única
+duplicates report conglome vivienda hogar // No reportar duplicados
+sort conglome vivienda hogar //Ordenando valores de menor a mayor
+drop p23 //La elimnaré antes de la unión porque está ya presente en la base anterior. 
+
+save prep-enaho01b-2022-2, replace  // var. 96 | obs. 34,213
+
+*---- merge m:1
+use int-enaho01-2022-1-2-6-3-4-5-sum, clear
+
+merge m:1 conglome vivienda hogar using prep-enaho01b-2022-2, gen()  keep(3)
+drop _merge   //Matched  87,661  (_merge==3)
+
+isid conglome vivienda hogar codperso // Es una clave única
+duplicates report conglome vivienda hogar codperso // No Presenta duplicados
+sort conglome vivienda hogar //Ordenando valores de menor a mayor
+
+save "int-enaho01-2022-1-2-6-3-4-5-sum-1b2", replace // var. 3,603 |obs. 87,661
+
+*==============================================================================
+*----------- BD unificada. 
+*==============================================================================
+use int-enaho01-2022-1-2-6-3-4-5-sum-1b2, clear
+
+browse conglome vivienda hogar codperso p203 p208a p209 p612n p612
+
+// eliminado todos los que no son jefes de hogar
+* drop if p203!=1   //AL FINAL SE HACE
+* tab p203
+
+save "master-enaho01-2022-Peru-respaldo-v01", replace //guardando respaldo. 
+save "master-enaho01-2022-Peru-v01", replace //guardando
+
+use master-enaho01-2022-Peru-v01, clear //abriendo
+isid conglome vivienda hogar codperso // Es una clave única
+duplicates report conglome vivienda hogar codperso // No reportar duplicados
+sort conglome vivienda hogar codperso //Ordenando valores de menor a mayor
+
+*==============================================================================
+*----------- FIN 
+*==============================================================================
+
